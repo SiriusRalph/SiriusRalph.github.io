@@ -1,0 +1,6 @@
+# never touch line endings in these
+*.pdf binary
+*.wasm binary
+*.mp4 binary
+*.jpg binary
+*.png binary

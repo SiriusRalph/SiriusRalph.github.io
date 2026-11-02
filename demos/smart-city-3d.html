@@ -1,0 +1,556 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Smart City 3D</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Questrial&family=Nunito+Sans:wght@400;600;700;800&family=VT323&display=swap">
+<style>
+/* Layout: full-screen 3D model of the city; HUD floats on top — controls top, Pi + IRI maths on the right, the 6-step process along the bottom, results dashboard as an overlay at the end. */
+:root{
+  --paper:#FFFFFF; --glass:rgba(255,255,255,.93); --mist:#E8F5F4; --line:#D8E4E8;
+  --ink:#1E3A4F; --muted:#5C7182; --teal:#2BB3B1; --deep:#12707A;
+  --ok:#2EB872; --warn:#E8A900; --crit:#E5484D;
+  --display:"Questrial","Century Gothic","Avenir Next",sans-serif;
+  --body:"Nunito Sans","Segoe UI",system-ui,sans-serif;
+  --lcd:"VT323","Courier New",monospace;
+  color-scheme:light;
+}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{background:#CFEFF5;color:var(--ink);font-family:var(--body);font-size:14px;line-height:1.45;overflow:hidden}
+#app{position:fixed;inset:0}
+#gl{position:absolute;inset:0}
+#gl canvas{display:block;width:100%;height:100%}
+#labels{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.lab{position:absolute;transform:translate(-50%,-130%);background:var(--glass);border:1px solid var(--line);border-radius:999px;padding:2px 9px;font-size:11.5px;font-weight:800;white-space:nowrap;box-shadow:0 3px 10px rgba(30,58,79,.15)}
+.lab.zone{background:var(--ink);color:#fff;border-color:var(--ink);font-family:var(--display);font-weight:400;letter-spacing:.12em;font-size:12px}
+.lab.sensor::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--teal);margin-right:6px;vertical-align:1px}
+#labels.off .lab{display:none}
+h1,h2,h3{font-family:var(--display);font-weight:400;margin:0;text-wrap:balance}
+.card{background:var(--glass);border:1px solid var(--line);border-radius:16px;box-shadow:0 8px 24px rgba(30,58,79,.12);backdrop-filter:blur(6px)}
+.eyebrow{font-size:10.5px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--teal)}
+
+#top{position:absolute;left:calc(12px + env(safe-area-inset-left,0px));right:calc(12px + env(safe-area-inset-right,0px));top:calc(12px + env(safe-area-inset-top,0px));display:flex;gap:10px;flex-wrap:wrap;justify-content:space-between;align-items:flex-start;pointer-events:none}
+#top>*{pointer-events:auto}
+.titlebox{padding:10px 16px}
+.titlebox h1{font-size:20px}
+#stagePill{display:inline-flex;align-items:center;gap:8px;margin-top:4px;font-weight:800;font-size:12px;letter-spacing:.08em;text-transform:uppercase}
+#stagePill i{width:12px;height:12px;border-radius:50%;background:var(--muted)}
+.btns{display:flex;flex-wrap:wrap;gap:6px;padding:8px;justify-content:flex-end}
+button{font:inherit;font-weight:800;font-size:13px;cursor:pointer;border-radius:999px;border:2px solid var(--line);background:var(--paper);color:var(--ink);padding:7px 13px;display:inline-flex;align-items:center;gap:7px}
+button:hover{border-color:var(--teal)}
+button:focus-visible{outline:3px solid var(--teal);outline-offset:2px}
+button .d{width:11px;height:11px;border-radius:50%}
+button[aria-pressed="true"]{background:var(--ink);color:#fff;border-color:var(--ink)}
+button.primary{background:var(--teal);color:#fff;border-color:var(--teal)}
+
+#caption{position:absolute;left:50%;transform:translateX(-50%);top:calc(96px + env(safe-area-inset-top,0px));max-width:min(620px,calc(100% - 32px));padding:10px 18px;font-family:var(--display);font-size:18px;text-align:center;transition:opacity .4s}
+#caption[data-empty="1"]{opacity:0}
+
+#side{position:absolute;right:calc(12px + env(safe-area-inset-right,0px));top:calc(150px + env(safe-area-inset-top,0px));width:300px;display:grid;gap:10px}
+.board{background:#1F7A4D;border-radius:14px;padding:12px;color:#fff;display:grid;gap:10px;box-shadow:inset 0 0 0 3px #17603C,0 8px 24px rgba(30,58,79,.18)}
+.board-top{display:flex;justify-content:space-between;font-size:11px;font-weight:800;letter-spacing:.08em}
+.lcd{background:#9FD36A;color:#1F3A12;border-radius:6px;padding:6px 10px;font-family:var(--lcd);font-size:24px;line-height:1.05;box-shadow:inset 0 0 0 4px #24456B;white-space:pre}
+.leds{display:flex;gap:12px;align-items:center}
+.led{width:24px;height:24px;border-radius:50%;opacity:.22;transition:opacity .25s}
+.led.g{background:var(--ok)}.led.y{background:#F2B705}.led.r{background:var(--crit)}
+.led.on{opacity:1}.led.g.on{box-shadow:0 0 14px 4px rgba(46,184,114,.8)}.led.y.on{box-shadow:0 0 14px 4px rgba(242,183,5,.8)}
+.led.r.on{box-shadow:0 0 14px 4px rgba(229,72,77,.9);animation:blink .5s steps(2) infinite}
+@keyframes blink{50%{opacity:.35}}
+.buzz{margin-left:auto;font-size:11px;font-weight:800;letter-spacing:.08em;background:rgba(0,0,0,.25);padding:4px 9px;border-radius:999px}
+.buzz.on{background:var(--crit);animation:blink .5s steps(2) infinite}
+.calc{padding:12px 14px;display:grid;gap:6px}
+.calc table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:12.5px}
+.calc th{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);text-align:right;font-weight:800;padding:0 0 4px}
+.calc th:first-child,.calc td:first-child{text-align:left}
+.calc td{text-align:right;padding:3px 0;border-top:1px solid var(--line)}
+.calc td.hl{transition:background .3s}
+.flash{background:#FFF3C4}
+.iri{display:flex;justify-content:space-between;align-items:baseline;border-top:2px solid var(--ink);padding-top:6px}
+.iri b{font-family:var(--display);font-size:34px;font-weight:400;font-variant-numeric:tabular-nums}
+
+#flow{position:absolute;left:calc(12px + env(safe-area-inset-left,0px));right:calc(324px + env(safe-area-inset-right,0px));bottom:calc(12px + env(safe-area-inset-bottom,0px));display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;padding:8px}
+.step{border:2px solid transparent;border-radius:12px;padding:7px 9px;display:grid;gap:1px;transition:all .25s;opacity:.55}
+.step .n{font-size:10px;font-weight:800;letter-spacing:.14em;color:var(--teal)}
+.step b{font-family:var(--display);font-weight:400;font-size:14.5px;line-height:1.2}
+.step small{font-size:11px;color:var(--muted);line-height:1.3}
+.step.on{opacity:1;border-color:var(--teal);background:var(--mist);transform:translateY(-3px)}
+
+/* results dashboard */
+#dash{position:absolute;inset:0;background:rgba(30,58,79,.45);display:grid;place-items:center;padding:calc(16px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));z-index:5}
+#dash .card{width:min(980px,100%);max-height:100%;overflow:auto;padding:20px;display:grid;gap:16px;background:var(--paper)}
+.dhead{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap}
+.dhead h2{font-size:24px}
+#dchart{width:100%;height:200px;display:block}
+.tests{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+@media (max-width:760px){.tests{grid-template-columns:1fr}}
+.test{border:1px solid var(--line);border-radius:14px;padding:12px 14px;display:grid;gap:6px}
+.test .hd{display:flex;justify-content:space-between;align-items:center;font-weight:800}
+.test .hd span{display:inline-flex;gap:8px;align-items:center}
+.test .hd i{width:14px;height:14px;border-radius:50%}
+.test .big{font-family:var(--display);font-size:38px;font-variant-numeric:tabular-nums}
+.test table{width:100%;font-size:12px;border-collapse:collapse;font-variant-numeric:tabular-nums}
+.test td{padding:2px 0;border-top:1px solid var(--line)}.test td:last-child{text-align:right}
+.pass{background:#DFF5E8;color:#17663D;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:800}
+.wait{background:var(--mist);color:var(--muted);border-radius:999px;padding:2px 10px;font-size:12px;font-weight:800}
+.note{font-size:12px;color:var(--muted)}
+
+@media (max-width:820px){
+  #side{top:auto;bottom:calc(12px + env(safe-area-inset-bottom,0px));left:calc(12px + env(safe-area-inset-left,0px));right:calc(12px + env(safe-area-inset-right,0px));width:auto;grid-template-columns:1fr 1fr}
+  .calc table{font-size:11px}
+  #flow{display:none}
+  #caption{top:auto;bottom:calc(250px + env(safe-area-inset-bottom,0px));font-size:15px}
+  .titlebox h1{font-size:16px}
+}
+@media (max-width:520px){#side{grid-template-columns:1fr}.calc{display:none}}
+@media (prefers-reduced-motion:reduce){.led.r.on,.buzz.on{animation:none}.step.on{transform:none}}
+</style>
+
+<div id="app">
+  <div id="gl"></div>
+  <div id="labels"></div>
+
+  <div id="top">
+    <div class="card titlebox">
+      <div class="eyebrow">Projet PACTE · Maquette 3D</div>
+      <h1>Smart City : le pont qui donne l'alerte</h1>
+      <div id="stagePill"><i id="stageDot"></i><span id="stageTxt">Prêt</span></div>
+    </div>
+    <div class="card btns" role="toolbar" aria-label="Contrôles">
+      <button id="b-demo" class="primary">▶ Lancer la démo</button>
+      <button data-st="normal" aria-pressed="false"><span class="d" style="background:var(--ok)"></span>Test 1</button>
+      <button data-st="modere" aria-pressed="false"><span class="d" style="background:var(--warn)"></span>Test 2</button>
+      <button data-st="critique" aria-pressed="false"><span class="d" style="background:var(--crit)"></span>Test 3</button>
+      <button id="b-dash">📊 Dashboard</button>
+      <button id="b-sound" aria-pressed="false">🔇 Son</button>
+      <button id="b-lab" aria-pressed="true">🏷 Étiquettes</button>
+    </div>
+  </div>
+
+  <div id="caption" class="card" data-empty="0">Voici notre ville miniature. Tournez-la avec la souris, puis lancez la démo.</div>
+
+  <aside id="side">
+    <div class="board">
+      <div class="board-top"><span>RASPBERRY PI 4</span><span id="clock">--:--:--</span></div>
+      <div class="lcd" id="lcd">IRI: --
+EN ATTENTE</div>
+      <div class="leds"><div class="led g" id="lg"></div><div class="led y" id="ly"></div><div class="led r" id="lr"></div><span class="buzz" id="buzz">BUZZER OFF</span></div>
+    </div>
+    <div class="card calc">
+      <div class="eyebrow">Normalisation puis calcul</div>
+      <table>
+        <thead><tr><th>Critère</th><th>Mesure</th><th>Score</th><th>Poids</th><th>=</th></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+      <div class="iri"><span>IRI</span><b id="iri">--</b></div>
+    </div>
+  </aside>
+
+  <div id="flow" class="card" aria-label="Le processus">
+    <div class="step" data-i="0"><span class="n">1</span><b>Capteurs</b><small>mesurent</small></div>
+    <div class="step" data-i="1"><span class="n">2</span><b>Raspberry Pi</b><small>lit (GPIO, I2C)</small></div>
+    <div class="step" data-i="2"><span class="n">3</span><b>Normalisation</b><small>score de 0 à 1</small></div>
+    <div class="step" data-i="3"><span class="n">4</span><b>Calcul IRI</b><small>somme pondérée</small></div>
+    <div class="step" data-i="4"><span class="n">5</span><b>Alertes</b><small>LED, buzzer, LCD</small></div>
+    <div class="step" data-i="5"><span class="n">6</span><b>Dashboard</b><small>Flask + Socket.IO</small></div>
+  </div>
+
+  <div id="dash" hidden>
+    <div class="card" role="dialog" aria-label="Dashboard des résultats">
+      <div class="dhead">
+        <div><div class="eyebrow">Dashboard web · résultats de la démo</div><h2>Les 3 tests, 3 bonnes réponses</h2></div>
+        <div style="display:flex;gap:6px"><button id="b-replay" class="primary">↺ Rejouer</button><button id="b-close">Fermer</button></div>
+      </div>
+      <canvas id="dchart" aria-label="Évolution de l'IRI pendant la démo"></canvas>
+      <div class="tests" id="tests"></div>
+      <p class="note">Simulation pédagogique : les valeurs des capteurs sont des exemples choisis pour reproduire les trois tests du projet (IRI 0,09 · 0,55 · 0,75). Règle de normalisation d'exemple : vibration ÷ 3 m/s², (température − 15) ÷ 30, (humidité − 40) ÷ 60, pluie et eau = 0 ou 1.</p>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(function(){
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const $ = id => document.getElementById(id);
+const fr = (x,d=2) => x.toFixed(d).replace(".", ",");
+
+/* ---------- data ---------- */
+const W = {vib:.30, pluie:.25, eau:.20, hum:.15, temp:.10};
+const CRIT = [["vib","Vibration"],["pluie","Pluie"],["eau","Eau stagnante"],["hum","Humidité"],["temp","Température"]];
+const STAGES = {
+  normal:  {name:"Test 1 · Normal",   color:"#2EB872", s:{vib:.10,pluie:0,eau:0,hum:.20,temp:.30}, expect:"< 0,40"},
+  modere:  {name:"Test 2 · Modéré",   color:"#E8A900", s:{vib:.50,pluie:1,eau:0,hum:2/3,temp:.50}, expect:"0,40 – 0,70"},
+  critique:{name:"Test 3 · Critique", color:"#E5484D", s:{vib:.70,pluie:1,eau:1,hum:.40,temp:.30}, expect:"≥ 0,70"}
+};
+const raw = s => ({vib:s.vib*3, pluie:s.pluie, eau:s.eau, hum:40+s.hum*60, temp:15+s.temp*30});
+const rawTxt = (k,v) => k==="vib"?fr(v,1)+" m/s²":k==="pluie"?(v?"oui":"non"):k==="eau"?(v?"oui":"non"):k==="hum"?Math.round(v)+" %":fr(v,0)+" °C";
+const iriOf = s => W.vib*s.vib+W.pluie*s.pluie+W.eau*s.eau+W.hum*s.hum+W.temp*s.temp;
+const levelOf = i => i>=0.7?"critique":i>=0.4?"modere":"normal";
+const LV = {normal:{t:"NORMAL",c:"#2EB872"},modere:{t:"MODERE",c:"#E8A900"},critique:{t:"CRITIQUE",c:"#E5484D"}};
+
+$("tbody").innerHTML = CRIT.map(([k,n])=>`<tr><td>${n}</td><td class="hl" id="m-${k}">–</td><td class="hl" id="s-${k}">–</td><td>×${fr(W[k])}</td><td class="hl" id="c-${k}">–</td></tr>`).join("");
+
+/* ---------- three.js scene ---------- */
+const host = $("gl");
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(2, window.devicePixelRatio||1));
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+host.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+const SKY = new THREE.Color("#CFEFF5"), SKY_RAIN = new THREE.Color("#9FB0BE");
+scene.background = SKY.clone(); scene.fog = new THREE.Fog(scene.background, 45, 90);
+const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 200);
+camera.position.set(2.5, 18, 27);
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.maxPolarAngle = Math.PI*0.47; controls.minDistance = 6; controls.maxDistance = 55;
+controls.target.set(2.5,0,1);
+
+scene.add(new THREE.HemisphereLight(0xffffff, 0x9bb3a0, 0.75));
+const sunLight = new THREE.DirectionalLight(0xffffff, 0.85);
+sunLight.position.set(-12, 22, 14); sunLight.castShadow = true;
+sunLight.shadow.mapSize.set(2048,2048);
+Object.assign(sunLight.shadow.camera,{left:-26,right:26,top:18,bottom:-18,near:1,far:70});
+scene.add(sunLight);
+
+const M = c => new THREE.MeshStandardMaterial({color:c, roughness:.85, metalness:0});
+function box(w,h,d,c,x,y,z,parent){ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),M(c)); m.position.set(x,y,z); m.castShadow=true; m.receiveShadow=true; (parent||scene).add(m); return m; }
+function cyl(rt,rb,h,c,x,y,z,parent,seg){ const m=new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,seg||20),M(c)); m.position.set(x,y,z); m.castShadow=true; m.receiveShadow=true; (parent||scene).add(m); return m; }
+
+// table board + land
+box(44,0.3,28,"#F1F4F5",0,-0.15,0);
+box(14,0.5,26,"#8CCB6E",-13,0.25,0);          // park land
+box(14,0.5,26,"#DDE3E6",13,0.25,0);           // city land
+box(12,0.1,26,"#6E5A46",0,0.05,0);            // river bed
+const waterMat = new THREE.MeshStandardMaterial({color:"#4FA9CC",roughness:.25,metalness:.1,transparent:true,opacity:.88});
+const water = new THREE.Mesh(new THREE.BoxGeometry(12,0.06,26), waterMat); water.position.set(0,0.16,0); water.receiveShadow=true; scene.add(water);
+// roads
+box(14,0.04,3,"#2F3E4C",-13,0.52,0); box(14,0.04,3,"#2F3E4C",13,0.52,0);
+for(let x=-19;x<=19;x+=2.2){ if(Math.abs(x)<6.6) continue; box(1,0.02,0.12,"#FFFFFF",x,0.55,0); }
+// park paths + bench
+box(1.2,0.02,10,"#D9C7A3",-13,0.51,7);
+box(1.6,0.12,0.5,"#B57B48",-15,0.85,5); box(0.1,0.3,0.4,"#5C4632",-15.7,0.65,5); box(0.1,0.3,0.4,"#5C4632",-14.3,0.65,5);
+
+// bridge (group shakes)
+const bridge = new THREE.Group(); scene.add(bridge);
+box(13.2,0.3,3.4,"#3A4A58",0,0.4,0,bridge);
+for(let x=-5.5;x<=5.5;x+=2.2) box(1,0.02,0.12,"#FFFFFF",x,0.56,0,bridge);
+box(13.2,0.35,0.12,"#C9D2D8",0,0.72,1.66,bridge); box(13.2,0.35,0.12,"#C9D2D8",0,0.72,-1.66,bridge);
+[-3,3].forEach(x=>{ cyl(.35,.4,0.4,"#24456B",x,0.15,1.1,bridge); cyl(.35,.4,0.4,"#24456B",x,0.15,-1.1,bridge); });
+// arches
+[1.66,-1.66].forEach(z=>{
+  const curve = new THREE.QuadraticBezierCurve3(new THREE.Vector3(-6.6,0.55,z), new THREE.Vector3(0,4.2,z), new THREE.Vector3(6.6,0.55,z));
+  const arch = new THREE.Mesh(new THREE.TubeGeometry(curve,40,0.14,8,false), M("#24456B")); arch.castShadow=true; bridge.add(arch);
+  for(let i=1;i<10;i++){ const p=curve.getPoint(i/10); const h=p.y-0.6; if(h>0.1){ const c=cyl(.04,.04,h,"#8FA3B3",p.x,0.6+h/2,z,bridge,6);} }
+});
+
+// trees
+function tree(x,z,s){ s=s||1; cyl(.12*s,.15*s,.9*s,"#7A5A3A",x,0.5+.45*s,z); const c=new THREE.Mesh(new THREE.SphereGeometry(.75*s,16,12),M("#3E9B4F")); c.position.set(x,0.5+1.3*s,z); c.castShadow=true; scene.add(c); }
+[[-17,-6],[-14.5,-8],[-11,-5.5],[-18,-2.5],[-9,-9],[-18.5,9],[-10,10],[-16.5,11.5],[-8.5,4],[-19,4.5]].forEach(([x,z],i)=>tree(x,z,0.9+((i*37)%5)/10));
+// puddle (eau stagnante)
+const puddleMat = new THREE.MeshStandardMaterial({color:"#3E95C2",roughness:.1,transparent:true,opacity:0});
+const puddle = new THREE.Mesh(new THREE.CylinderGeometry(1,1,0.03,40), puddleMat); puddle.position.set(-12,0.52,4.5); puddle.scale.set(.3,1,.3); scene.add(puddle);
+
+// buildings like the real model
+box(1.7,4,1.7,"#F08A3C",7.8,2.5,-5);
+box(1.5,6.2,1.5,"#4B3B8F",9.8,3.6,-7.5);
+box(1.5,5.2,1.5,"#E8D84A",7.6,3.1,-9.3);
+box(1.4,2.4,1.4,"#7ED3B2",10.2,1.7,-4.2);
+box(2.4,1.8,1.8,"#58A6E6",18,1.4,-3.5);
+box(1.6,3.4,1.6,"#E8D84A",18.4,2.2,-9);
+// school
+box(5.4,2.2,3.4,"#F4F8FA",14,1.6,-6);
+const tri = new THREE.Shape(); tri.moveTo(-2.9,0); tri.lineTo(2.9,0); tri.lineTo(0,1.3); tri.lineTo(-2.9,0);
+const roof = new THREE.Mesh(new THREE.ExtrudeGeometry(tri,{depth:3.6,bevelEnabled:false}), M("#24456B")); roof.position.set(14,2.7,-7.8); roof.castShadow=true; scene.add(roof);
+[[12.3,1.9],[14,1.9],[15.7,1.9],[12.3,1.1],[15.7,1.1]].forEach(([x,y])=>box(.8,.6,.05,"#7FC6E6",x,y,-4.28));
+box(.9,1.2,.05,"#B57B48",14,1.1,-4.28);
+cyl(.04,.04,2,"#8FA3B3",16.4,4.1,-6,null,6); box(.7,.45,.03,"#2BB3B1",16.78,4.8,-6);
+
+// barriers
+function barrier(x,z,dir){
+  box(.25,1.1,.25,"#1E3A4F",x,1.05,z);
+  const g=new THREE.Group(); g.position.set(x,1.45,z); scene.add(g);
+  const arm=box(.16,.16,3.4,"#E5484D",0,0,-1.7*dir,g);
+  for(let i=0;i<3;i++) box(.18,.18,.35,"#FFFFFF",0,0,-(0.6+i*1.1)*dir,g);
+  return g;
+}
+const bar1 = barrier(-7.1,1.8,1), bar2 = barrier(7.1,-1.8,-1);
+function signTexture(txt,bg){ const c=document.createElement("canvas"); c.width=256;c.height=72; const x=c.getContext("2d"); x.fillStyle=bg; x.beginPath(); x.roundRect?x.roundRect(0,0,256,72,36):x.rect(0,0,256,72); x.fill(); x.fillStyle="#fff"; x.font="bold 34px Nunito Sans, sans-serif"; x.textAlign="center"; x.textBaseline="middle"; x.fillText(txt,128,38); const t=new THREE.CanvasTexture(c); t.encoding=THREE.sRGBEncoding; return t; }
+const closed1 = new THREE.Sprite(new THREE.SpriteMaterial({map:signTexture("PONT FERMÉ","#E5484D"),transparent:true,opacity:0})); closed1.scale.set(3,.85,1); closed1.position.set(-8.6,2.6,1.8); scene.add(closed1);
+const closed2 = closed1.clone(); closed2.material = closed1.material; closed2.position.set(8.6,2.6,-1.8); scene.add(closed2);
+
+// cars
+const carCols=["#E5484D","#F2B705","#2BB3B1","#FFFFFF","#7A5AF8","#F08A3C"];
+const cars=[];
+function car(x,lane,c){ const g=new THREE.Group(); box(1.25,.38,.72,c,0,0,0,g); box(.65,.3,.62,c,-.05,.32,0,g); box(.66,.2,.63,"#BFE3F2",-.05,.33,0,g).scale.set(.98,1,1.02); [[.38,.36],[-.38,.36],[.38,-.36],[-.38,-.36]].forEach(([a,b])=>{const w=cyl(.13,.13,.1,"#1E2A33",a,-.17,b,g,12); w.rotation.x=Math.PI/2;}); g.position.set(x,0.78,lane>0?.75:-.75); if(lane<0) g.rotation.y=Math.PI; scene.add(g); cars.push({g,x,lane,speed:2.6+Math.random()*1.2}); }
+[-18,-11,-3,5,13].forEach((x,i)=>car(x,1,carCols[i])); [16,9,1,-7,-15].forEach((x,i)=>car(x,-1,carCols[(i+2)%6]));
+
+// Raspberry Pi station on the city base
+const PI_POS = new THREE.Vector3(10,0.62,6.5);
+box(2.4,.12,1.6,"#1F7A4D",10,0.56,6.5);
+box(.7,.3,.6,"#C9CED3",9.4,0.75,6.4); box(.5,.25,.5,"#C9CED3",10.3,0.72,6.9); box(1.8,.08,.15,"#D4AF37",10.1,.66,5.85);
+box(3,.16,1.3,"#FAFAFA",10.2,0.58,8.4); // breadboard
+const ledMats = ["#2EB872","#F2B705","#E5484D"].map(c=>new THREE.MeshStandardMaterial({color:c,emissive:c,emissiveIntensity:.05,roughness:.3}));
+const leds = ledMats.map((m,i)=>{ const s=new THREE.Mesh(new THREE.SphereGeometry(.2,16,12),m); s.position.set(9.3+i*.6,0.86,8.4); scene.add(s); return s; });
+const buzzer = cyl(.3,.3,.3,"#1E1E1E",11.4,0.81,8.4);
+// LCD
+const lcdCanvas=document.createElement("canvas"); lcdCanvas.width=512; lcdCanvas.height=180;
+const lcdTex=new THREE.CanvasTexture(lcdCanvas); lcdTex.encoding=THREE.sRGBEncoding;
+box(2.9,1.2,.18,"#24456B",13.4,1.25,7.2);
+const lcdMesh=new THREE.Mesh(new THREE.PlaneGeometry(2.6,.92),new THREE.MeshBasicMaterial({map:lcdTex})); lcdMesh.position.set(13.4,1.25,7.3); scene.add(lcdMesh);
+box(.15,.6,.15,"#24456B",13.4,0.6,7.2);
+function drawLcd(l1,l2){ const x=lcdCanvas.getContext("2d"); x.fillStyle="#9FD36A"; x.fillRect(0,0,512,180); x.fillStyle="#1F3A12"; x.font="76px VT323, Courier New, monospace"; x.textBaseline="top"; x.fillText(l1,24,10); x.fillText(l2,24,90); lcdTex.needsUpdate=true; }
+drawLcd("IRI: --","EN ATTENTE");
+const alarmLight = new THREE.PointLight(0xff3344, 0, 14); alarmLight.position.set(10.6,2.5,8); scene.add(alarmLight);
+
+// sensors
+function glowTex(){ const c=document.createElement("canvas"); c.width=c.height=128; const x=c.getContext("2d"); const g=x.createRadialGradient(64,64,0,64,64,64); g.addColorStop(0,"rgba(43,179,177,.95)"); g.addColorStop(.45,"rgba(43,179,177,.35)"); g.addColorStop(1,"rgba(43,179,177,0)"); x.fillStyle=g; x.fillRect(0,0,128,128); return new THREE.CanvasTexture(c); }
+const GLOW = glowTex();
+const sensors = [];
+function sensor(id,label,pos,color,parent,size){
+  size=size||[.55,.12,.4];
+  const m=box(size[0],size[1],size[2],color,pos.x,pos.y,pos.z,parent);
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:GLOW,transparent:true,depthWrite:false})); sp.position.copy(pos); sp.position.y+=.15; sp.scale.set(1.4,1.4,1); (parent||scene).add(sp);
+  const s={id,label,mesh:m,glow:sp,parent}; sensors.push(s); return s;
+}
+const sMPU = sensor("mpu","MPU6050 · vibrations",new THREE.Vector3(-2,0.62,1.2),"#2B57A0",bridge);
+const sSW  = sensor("sw","SW-420 · chocs",new THREE.Vector3(2,0.62,1.2),"#1E64C8",bridge);
+cyl(.05,.05,2.1,"#8FA3B3",12,1.55,-3.2,null,6);
+const sYL  = sensor("yl","YL-83 · pluie",new THREE.Vector3(12,2.65,-3.2),"#1E64C8",null,[.7,.06,.5]);
+cyl(.05,.05,0.9,"#8FA3B3",-9.5,0.95,2.6,null,6);
+const sDHT = sensor("dht","DHT22 · température & humidité",new THREE.Vector3(-9.5,1.55,2.6),"#FFFFFF",null,[.35,.45,.25]);
+const sEAU = sensor("eau","Capteur d'eau stagnante",new THREE.Vector3(-12,0.62,3.5),"#12707A",null,[.35,.16,.35]);
+
+// wires + data pulses
+const wireMat = new THREE.MeshStandardMaterial({color:"#2BB3B1",roughness:.5});
+const routes = {
+  mpu:[[-2,.62,1.2],[-2,.6,1.75],[6.6,.6,1.75],[8.6,.56,3.5],[9.6,.6,5.8],[10,.62,6.5]],
+  sw:[[2,.62,1.2],[2.2,.6,1.8],[6.6,.6,1.85],[8.8,.56,3.6],[9.8,.6,5.8],[10,.62,6.5]],
+  yl:[[12,2.6,-3.2],[12,.56,-3.1],[11.4,.56,-1.6],[11.2,.56,1.6],[10.6,.56,4.5],[10.2,.62,6.4]],
+  dht:[[-9.5,1.4,2.6],[-9.5,.54,2.4],[-7,.56,1.95],[6.6,.6,1.95],[9,.56,3.8],[9.9,.62,6.3]],
+  eau:[[-12,.62,3.5],[-11,.54,2.6],[-7,.56,2.05],[6.6,.6,2.05],[9.2,.56,4],[10.1,.62,6.3]]
+};
+const curves = {}, pulses = [];
+Object.entries(routes).forEach(([k,pts])=>{
+  const c=new THREE.CatmullRomCurve3(pts.map(p=>new THREE.Vector3(...p)),false,"catmullrom",.2);
+  curves[k]=c; const t=new THREE.Mesh(new THREE.TubeGeometry(c,80,.045,6,false),wireMat); scene.add(t);
+  const p=new THREE.Mesh(new THREE.SphereGeometry(.16,12,10),new THREE.MeshBasicMaterial({color:"#FFE36E"})); p.visible=false; scene.add(p); pulses.push({k,mesh:p});
+});
+
+// weather: sun, clouds, rain
+const sun = new THREE.Mesh(new THREE.SphereGeometry(1.6,24,16),new THREE.MeshBasicMaterial({color:"#F7C948",transparent:true})); sun.position.set(-18,16,-18); scene.add(sun);
+const clouds = new THREE.Group(); scene.add(clouds);
+const cloudMat = new THREE.MeshStandardMaterial({color:"#8C9DAA",roughness:1,transparent:true,opacity:0});
+[[-12,10,-4],[-2,11,-6],[8,10.5,-3],[15,11,2],[-6,10,4],[3,10.8,6]].forEach(([x,y,z])=>{ for(let i=0;i<4;i++){ const s=new THREE.Mesh(new THREE.SphereGeometry(1.2+Math.random()*.6,14,10),cloudMat); s.position.set(x+i*1.3-2,y+Math.random()*.5,z+Math.random()); clouds.add(s);} });
+const N=2200, rainGeo=new THREE.BufferGeometry(), rp=new Float32Array(N*3);
+for(let i=0;i<N;i++){ rp[i*3]=(Math.random()-.5)*42; rp[i*3+1]=Math.random()*11; rp[i*3+2]=(Math.random()-.5)*26; }
+rainGeo.setAttribute("position",new THREE.BufferAttribute(rp,3));
+const rainMat=new THREE.PointsMaterial({color:"#557E9C",size:.09,transparent:true,opacity:0,depthWrite:false});
+scene.add(new THREE.Points(rainGeo,rainMat));
+
+/* ---------- labels ---------- */
+const labelsEl=$("labels"), labels=[];
+function label(text,getPos,cls){ const d=document.createElement("div"); d.className="lab "+(cls||""); d.textContent=text; labelsEl.appendChild(d); labels.push({d,getPos}); }
+const wp = (obj)=>()=>obj.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0,.35,0));
+sensors.forEach(s=>label(s.label,wp(s.mesh),"sensor"));
+label("Raspberry Pi 4",()=>new THREE.Vector3(10,1.1,6.5));
+label("LEDs + buzzer",()=>new THREE.Vector3(10.2,1.2,8.6));
+label("Écran LCD",()=>new THREE.Vector3(13.4,2.2,7.2));
+label("PONT",()=>new THREE.Vector3(0,4.6,0),"zone");
+label("PARC",()=>new THREE.Vector3(-14,3,-1),"zone");
+label("ÉCOLE",()=>new THREE.Vector3(14,4.6,-6),"zone");
+const tmpV=new THREE.Vector3();
+function updateLabels(){
+  const w=host.clientWidth,h=host.clientHeight;
+  labels.forEach(l=>{ tmpV.copy(l.getPos()).project(camera); const vis=tmpV.z<1 && Math.abs(tmpV.x)<1.1 && Math.abs(tmpV.y)<1.1; l.d.style.display=vis?"":"none"; if(vis){ l.d.style.left=((tmpV.x+1)/2*w)+"px"; l.d.style.top=((1-tmpV.y)/2*h)+"px"; } });
+}
+
+/* ---------- state ---------- */
+let stage=null;                  // what the city is experiencing
+let env={vib:0,pluie:0,eau:0,hum:.2,temp:.3}; // smoothed environment (scores)
+let measured=null, level=null, lastIri=null;
+let step=-1, stepT=0; const STEP_DUR=1.0;
+let soundOn=false, audio=null;
+const history=[]; let histT0=performance.now();
+const results={};
+
+function setStage(name){
+  stage=name;
+  document.querySelectorAll("[data-st]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.st===name)));
+  $("stageTxt").textContent=STAGES[name].name; $("stageDot").style.background=STAGES[name].color;
+  step=-1; stepT=STEP_DUR; // restart pipeline right away
+}
+
+function onStep(i){
+  document.querySelectorAll(".step").forEach(el=>el.classList.toggle("on",+el.dataset.i===i));
+  if(!stage) return;
+  const target=STAGES[stage].s;
+  if(i===0){ pulses.forEach(p=>{p.mesh.visible=true;}); }
+  if(i===2){ // normalisation
+    measured={...target}; const r=raw(measured);
+    CRIT.forEach(([k])=>{ $("m-"+k).textContent=rawTxt(k,r[k]); $("s-"+k).textContent=fr(measured[k]); flash("s-"+k); $("c-"+k).textContent="…"; });
+  }
+  if(i===3 && measured){ // IRI
+    CRIT.forEach(([k])=>{ $("c-"+k).textContent=fr(measured[k]*W[k]); flash("c-"+k); });
+    const iri=iriOf(measured); lastIri=iri; $("iri").textContent=fr(iri); $("iri").style.color=LV[levelOf(iri)].c;
+    results[stage]={iri, s:{...measured}};
+  }
+  if(i===4 && lastIri!=null){ applyLevel(levelOf(lastIri), lastIri); }
+  if(i===5 && lastIri!=null){ history.push({t:(performance.now()-histT0)/1000, iri:lastIri, stage}); if(history.length>200) history.shift(); }
+}
+function flash(id){ const el=$(id); el.classList.add("flash"); setTimeout(()=>el.classList.remove("flash"),500); }
+
+function applyLevel(lv,iri){
+  level=lv;
+  $("lcd").textContent="IRI: "+fr(iri)+"\n"+LV[lv].t; drawLcd("IRI: "+fr(iri), LV[lv].t);
+  $("lg").classList.toggle("on",lv==="normal"); $("ly").classList.toggle("on",lv==="modere"); $("lr").classList.toggle("on",lv==="critique");
+  ledMats.forEach((m,k)=>m.emissiveIntensity = (["normal","modere","critique"][k]===lv)?1.6:.05);
+  $("buzz").classList.toggle("on",lv==="critique"); $("buzz").textContent=lv==="critique"?"BUZZER ON":"BUZZER OFF";
+}
+
+/* ---------- sound ---------- */
+$("b-sound").addEventListener("click",()=>{
+  soundOn=!soundOn;
+  if(soundOn&&!audio){ try{audio=new (window.AudioContext||window.webkitAudioContext)();}catch(e){} }
+  if(audio&&audio.state==="suspended") audio.resume();
+  $("b-sound").setAttribute("aria-pressed",String(soundOn)); $("b-sound").textContent=soundOn?"🔊 Son":"🔇 Son";
+});
+let beepAcc=0;
+function beep(){ if(!soundOn||!audio) return; [0,.28].forEach(d=>{ const o=audio.createOscillator(),g=audio.createGain(); o.type="square"; o.frequency.value=880; g.gain.value=.05; o.connect(g); g.connect(audio.destination); o.start(audio.currentTime+d); o.stop(audio.currentTime+d+.16); }); }
+
+/* ---------- camera moves ---------- */
+const CAMS={
+  overview:{p:[2.5,18,27],t:[2.5,0,1]},
+  park:{p:[-20,9,16],t:[-8,0.5,1]},
+  bridge:{p:[-3,7.5,12],t:[0,1,0]},
+  close:{p:[4,4.2,7.5],t:[0,1,0]},
+  pi:{p:[15,6,15.5],t:[10.5,0.8,7]}
+};
+let camAnim=null;
+function moveCam(name,dur){ const c=CAMS[name]; camAnim={from:camera.position.clone(),fromT:controls.target.clone(),to:new THREE.Vector3(...c.p),toT:new THREE.Vector3(...c.t),t:0,dur:dur||2.2}; }
+controls.addEventListener("start",()=>{camAnim=null;});
+
+/* ---------- guided demo ---------- */
+const SCRIPT=[
+  {d:4, cam:"overview", cap:"Voici notre ville miniature : un pont, un parc, une école… et le Raspberry Pi qui surveille tout."},
+  {d:4, cam:"pi", cap:"Les capteurs sont reliés au Raspberry Pi par des fils. Il lit leurs mesures en continu."},
+  {d:12, cam:"overview", stage:"normal", cap:"Test 1 · Beau temps, le pont est calme. Suivez le trajet des données en bas de l'écran."},
+  {d:12, cam:"bridge", stage:"modere", cap:"Test 2 · La pluie arrive et le pont vibre davantage : il faut surveiller."},
+  {d:5, cam:"park", stage:"critique", cap:"Test 3 · L'eau s'accumule au sol et dans la rivière…"},
+  {d:10, cam:"close", cap:"…et les vibrations deviennent fortes : danger ! Alarme, LED rouge et pont fermé."},
+  {d:0, dash:true}
+];
+let demo=null;
+function startDemo(){
+  $("dash").hidden=true; history.length=0; histT0=performance.now(); Object.keys(results).forEach(k=>delete results[k]);
+  demo={i:-1,t:0}; nextScene(); $("b-demo").textContent="⏸ Arrêter";
+}
+function stopDemo(){ demo=null; $("b-demo").textContent="▶ Lancer la démo"; }
+function nextScene(){
+  demo.i++; const sc=SCRIPT[demo.i]; demo.t=0;
+  if(!sc){stopDemo();return;}
+  if(sc.dash){ stopDemo(); openDash(); return; }
+  if(sc.cam) moveCam(sc.cam);
+  if(sc.stage) setStage(sc.stage);
+  setCaption(sc.cap);
+}
+function setCaption(t){ const c=$("caption"); c.textContent=t||""; c.dataset.empty=t?"0":"1"; }
+$("b-demo").addEventListener("click",()=>{ demo?stopDemo():startDemo(); });
+document.querySelectorAll("[data-st]").forEach(b=>b.addEventListener("click",()=>{
+  stopDemo(); const n=b.dataset.st; setStage(n); moveCam(n==="normal"?"overview":n==="modere"?"bridge":"close");
+  setCaption({normal:"Test 1 · Beau temps : tout est calme.",modere:"Test 2 · Pluie et vibrations plus fortes.",critique:"Test 3 · Pluie, eau stagnante, fortes vibrations : danger !"}[n]);
+}));
+$("b-lab").addEventListener("click",()=>{ const on=labelsEl.classList.toggle("off"); $("b-lab").setAttribute("aria-pressed",String(!on)); });
+
+/* ---------- results dashboard ---------- */
+function openDash(){
+  $("dash").hidden=false;
+  const order=["normal","modere","critique"];
+  $("tests").innerHTML=order.map((k,i)=>{
+    const st=STAGES[k], r=results[k];
+    if(!r) return `<div class="test"><div class="hd"><span><i style="background:${st.color}"></i>${st.name}</span><span class="wait">Pas encore testé</span></div><div class="note">Attendu : IRI ${st.expect}</div></div>`;
+    const ok=levelOf(r.iri)===k;
+    return `<div class="test"><div class="hd"><span><i style="background:${st.color}"></i>${st.name}</span><span class="${ok?"pass":"wait"}">${ok?"✓ PASS":"À revoir"}</span></div>
+      <div class="big" style="color:${st.color}">${fr(r.iri)}</div><div class="note">Attendu : IRI ${st.expect} → ${ok?"LED "+({normal:"verte",modere:"jaune",critique:"rouge + buzzer"}[k]):""}</div>
+      <table>${CRIT.map(([c,n])=>`<tr><td>${n}</td><td>${fr(r.s[c])} × ${fr(W[c])} = ${fr(r.s[c]*W[c])}</td></tr>`).join("")}</table></div>`;
+  }).join("");
+  requestAnimationFrame(drawDash);
+}
+$("b-dash").addEventListener("click",openDash);
+$("b-close").addEventListener("click",()=>{$("dash").hidden=true;});
+$("b-replay").addEventListener("click",startDemo);
+function drawDash(){
+  const cv=$("dchart"), dpr=window.devicePixelRatio||1, w=cv.clientWidth, h=cv.clientHeight; cv.width=w*dpr; cv.height=h*dpr;
+  const x=cv.getContext("2d"); x.setTransform(dpr,0,0,dpr,0,0); x.clearRect(0,0,w,h);
+  const L=36,R=12,T=10,B=24,pw=w-L-R,ph=h-T-B,Y=v=>T+ph*(1-v);
+  [[0,.4,"rgba(46,184,114,.12)"],[.4,.7,"rgba(232,169,0,.14)"],[.7,1,"rgba(229,72,77,.12)"]].forEach(([a,b,c])=>{x.fillStyle=c;x.fillRect(L,Y(b),pw,Y(a)-Y(b));});
+  x.font="12px Nunito Sans, sans-serif"; x.fillStyle="#5C7182"; x.textAlign="right"; x.textBaseline="middle";
+  [[0,"0"],[.4,"0,4"],[.7,"0,7"],[1,"1"]].forEach(([v,t])=>{x.fillText(t,L-6,Y(v)); x.strokeStyle="#D8E4E8"; x.beginPath(); x.moveTo(L,Y(v)); x.lineTo(L+pw,Y(v)); x.stroke();});
+  if(history.length<1){ x.textAlign="center"; x.fillText("Lancez la démo pour remplir le dashboard",L+pw/2,T+ph/2); return; }
+  const t0=history[0].t, t1=Math.max(history[history.length-1].t, t0+1), X=t=>L+(t-t0)/(t1-t0)*pw;
+  x.textAlign="center"; x.textBaseline="top"; x.fillText("temps de la démo (s)",L+pw/2,T+ph+6);
+  x.beginPath(); history.forEach((p,i)=>{ const px=X(p.t),py=Y(p.iri); if(i){ x.lineTo(px,Y(history[i-1].iri)); x.lineTo(px,py);} else x.moveTo(px,py); });
+  x.strokeStyle="#1E3A4F"; x.lineWidth=2.5; x.stroke();
+  history.forEach(p=>{ x.fillStyle=STAGES[p.stage].color; x.beginPath(); x.arc(X(p.t),Y(p.iri),4.5,0,7); x.fill(); });
+}
+
+/* ---------- loop ---------- */
+function resize(){ const w=host.clientWidth,h=host.clientHeight; renderer.setSize(w,h,false); camera.aspect=w/h; camera.fov = w<700?55:42; camera.updateProjectionMatrix(); }
+window.addEventListener("resize",()=>{resize(); if(!$("dash").hidden) drawDash();});
+resize();
+
+const clock=new THREE.Clock(); let elapsed=0;
+function tick(){
+  const rdt=Math.min(clock.getDelta(),.5), dt=Math.min(rdt,.05); elapsed+=dt;
+  // environment follows the stage smoothly
+  const tg=stage?STAGES[stage].s:{vib:0,pluie:0,eau:0,hum:.2,temp:.3};
+  ["vib","hum","temp"].forEach(k=>env[k]+=(tg[k]-env[k])*Math.min(1,dt*1.5));
+  ["pluie","eau"].forEach(k=>env[k]+=(tg[k]-env[k])*Math.min(1,dt*1.2));
+  // weather visuals
+  const r=env.pluie;
+  scene.background.copy(SKY).lerp(SKY_RAIN,r); scene.fog.color.copy(scene.background);
+  rainMat.opacity=.8*r; cloudMat.opacity=.95*r; sun.material.opacity=1-r*.85; sunLight.intensity=.85-.35*r;
+  if(r>.02 && !reduce){ const a=rainGeo.attributes.position.array; for(let i=0;i<N;i++){ a[i*3+1]-=dt*14; if(a[i*3+1]<0.5) a[i*3+1]=11; } rainGeo.attributes.position.needsUpdate=true; }
+  const e=env.eau; puddle.scale.set(.3+2.2*e,1,.3+1.6*e); puddleMat.opacity=.85*e; water.position.y=.16+.25*e;
+  // bridge shake
+  const amp=reduce?0:Math.pow(env.vib,2)*.12;
+  bridge.position.set(Math.sin(elapsed*40)*amp, Math.abs(Math.cos(elapsed*33))*amp*.6, Math.cos(elapsed*29)*amp*.5);
+  // barriers + signs
+  const crit=level==="critique";
+  const tgtRot=crit?0:1.35; bar1.rotation.x+=(tgtRot-bar1.rotation.x)*Math.min(1,dt*3); bar2.rotation.x+=(-tgtRot-bar2.rotation.x)*Math.min(1,dt*3);
+  closed1.material.opacity+=((crit?1:0)-closed1.material.opacity)*Math.min(1,dt*4);
+  alarmLight.intensity = crit? (Math.sin(elapsed*12)>0?2.2:0.2) : 0;
+  if(crit){ beepAcc+=dt; if(beepAcc>1){beepAcc=0; beep();} } else beepAcc=1;
+  // cars
+  cars.forEach(c=>{
+    const dir=c.lane, front=dir>0?c.x:-c.x;   // progress along its lane
+    const stopLine=-8.0; // in lane coordinates, before the barrier
+    let v=reduce?0:c.speed;
+    if(crit && front<stopLine && front>stopLine-0.4-0.1) v=0;
+    if(crit){ const ahead=cars.filter(o=>o!==c&&o.lane===dir).map(o=>dir>0?o.x:-o.x).filter(f=>f>front&&f<front+1.7&&f<=stopLine+.05); if(ahead.length && front<stopLine) v=0; }
+    c.x+=v*dt*dir;
+    if(dir>0&&c.x>21) c.x=-21; if(dir<0&&c.x<-21) c.x=21;
+    const onB=Math.abs(c.x)<6.6;
+    c.g.position.x=c.x+(onB?bridge.position.x:0); c.g.position.y=0.78+(onB?bridge.position.y:0);
+  });
+  // sensor glow pulse
+  sensors.forEach((s,i)=>{ const k=1.2+Math.sin(elapsed*4+i)*.25+(step===0?.5:0); s.glow.scale.set(k,k,1); });
+  // pipeline
+  if(stage){ stepT+=rdt; if(stepT>=STEP_DUR){ stepT=0; step=(step+1)%6; onStep(step); } }
+  const pt = step===0? stepT/STEP_DUR*0.5 : step===1? .5+stepT/STEP_DUR*0.5 : -1;
+  pulses.forEach(p=>{ if(pt<0){p.mesh.visible=false;return;} p.mesh.visible=true; p.mesh.position.copy(curves[p.k].getPoint(Math.min(pt,1))); });
+  // camera animation
+  if(camAnim){ camAnim.t+=rdt; const u=Math.min(1,camAnim.t/camAnim.dur), s=u<.5?2*u*u:1-Math.pow(-2*u+2,2)/2;
+    camera.position.lerpVectors(camAnim.from,camAnim.to,s); controls.target.lerpVectors(camAnim.fromT,camAnim.toT,s); if(u>=1) camAnim=null; }
+  // demo timeline
+  if(demo){ demo.t+=rdt; const sc=SCRIPT[demo.i]; if(sc && demo.t>=sc.d) nextScene(); }
+  $("clock").textContent=new Date().toLocaleTimeString("fr-FR");
+  controls.update(); renderer.render(scene,camera); updateLabels();
+  requestAnimationFrame(tick);
+}
+tick();
+})();
+</script>
+
+</body></html>

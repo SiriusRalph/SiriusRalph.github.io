@@ -1,0 +1,6 @@
+# dependencies and local Cloudflare state (rebuilt by npm install / wrangler)
+ai/node_modules/
+ai/.wrangler/
+ai/.dev.vars
+# old design kept locally only
+_backup-design-v1/
