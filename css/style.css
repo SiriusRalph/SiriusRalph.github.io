@@ -312,6 +312,15 @@ button.tile { display: flex; flex-direction: column; }
   border: 0; background: transparent; font-size: 18px; outline: none; color: #2A1C13;
 }
 .ask-box input::placeholder { color: #8A7461; }
+/* phones: keep the box on one line, the button shrinks to its arrow (the word stays for screen readers) */
+@media (max-width: 480px) {
+  .ask-box { flex-wrap: nowrap; }
+  .ask-box input { padding: 0 12px; font-size: 17px; }
+  .ask-box .btn-primary { flex: none; width: 50px; padding: 0; }
+  .ask-box .btn-label {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+  }
+}
 .btn-primary {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   min-height: 50px; padding: 0 22px; border: 0; border-radius: 999px;
@@ -438,6 +447,11 @@ button.tile { display: flex; flex-direction: column; }
 .step { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: var(--r-sm); background: rgba(0, 0, 0, .3); font-size: 14px; }
 .step code { font-family: var(--font-mono); color: var(--t-caramel); }
 .step span { color: rgba(247, 234, 219, .8); }
+.step code { overflow-wrap: anywhere; }
+/* phones: the code on top, what it means underneath, each step full width */
+@media (max-width: 560px) {
+  .step { flex-direction: column; align-items: flex-start; gap: 4px; width: 100%; }
+}
 
 .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr)); gap: 28px; }
 .card {
